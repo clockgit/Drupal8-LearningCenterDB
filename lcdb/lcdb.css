@@ -1,0 +1,10 @@
+/** display fields inline on add/edit form **/
+@media all and (min-width: 980px) {
+  .inline > .fieldset-wrapper {
+    display: flex;
+    flex-flow: row;
+    align-items: flex-end;
+    justify-content: space-around;
+  }
+}
+

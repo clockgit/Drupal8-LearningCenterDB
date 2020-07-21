@@ -1,0 +1,76 @@
+/** set in the theme info.yml **/
+.print-hidden{
+  display: none;
+  visibility: hidden;
+}
+.print{
+  visibility: visible;
+  display: inherit !important;
+}
+body {
+  margin: 50px 10px;
+}
+a {
+  text-decoration: none;
+  color: #000;
+}
+table{
+  border-collapse: collapse;
+  border: 0;
+  font-family: "Open Sans";
+  font-size: 10pt;
+  text-align: left;
+  width: 100%;
+}
+tr{
+  line-height: 1em;
+}
+
+tr:nth-child(even) {background-color: #f2f2f2;}
+
+img {
+  max-width: 80%;
+  height: auto;
+}
+#print-header>div {
+  display: inline-block;
+  margin-right: 4em;
+}
+#print-header .right {
+  float: right;
+}
+#print-header .right .field__label {
+  width: 65px;
+}
+.field--name-field-line2{
+  margin-left: 77px;
+}
+
+.field--label-inline .field__label, .field--label-inline > .field__item, .field--label-inline .field__items {
+  display: inline-block;
+  padding-right: 0.5em;
+}
+.field__label {
+  font-weight: bold;
+}
+.field--label-inline .field__label::after {
+  content: ":";
+}
+.signature {
+  border-bottom: 1px solid;
+  padding-top: 4em;
+  vertical-align: bottom;
+}
+.signature .right {
+  float: right;
+  padding-right: 100px;
+}
+/*.clearfix::after {
+  display: table;
+  clear: both;
+  content: "";
+}*/
+.total {
+  text-align: right;
+  font-weight: bold;
+}

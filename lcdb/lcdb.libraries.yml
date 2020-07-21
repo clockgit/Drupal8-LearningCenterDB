@@ -1,0 +1,15 @@
+inline_fields:
+  version: 1.x
+  css:
+    theme:
+      lcdb.css: {}
+view_menu:
+  version: 1.x
+  css:
+    theme:
+      view_menu.css: {}
+print_css:
+  version: 1.x
+  css:
+    theme:
+      css/print.css: {}

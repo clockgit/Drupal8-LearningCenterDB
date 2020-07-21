@@ -1,0 +1,19 @@
+<?php
+/**
+ * remove fields that have been deleted.
+ */
+function lcdb_update_8001() {
+/*  $service = \Drupal::service('entity_field.deleted_fields_repository');
+
+  $deleted_storage_definitions = $service->getFieldStorageDefinitions();
+
+  foreach ($deleted_storage_definitions as $deleted_storage_definition) {
+    $service->removeFieldStorageDefinition($deleted_storage_definition);
+  }
+
+  $deleted_field_definitions = $service->getFieldDefinitions();
+
+  foreach ($deleted_field_definitions as $deleted_field_definition) {
+    $service->removeFieldDefinition($deleted_field_definition);
+  }*/
+}

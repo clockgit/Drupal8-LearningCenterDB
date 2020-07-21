@@ -1,0 +1,11 @@
+/*.form-actions {
+  position: sticky;
+  bottom: 10px;
+  background: #fed175;
+  padding: 10px;
+  border-radius: 10px;
+}*/
+
+.region.region-primary-menu * {
+  float: left;
+}

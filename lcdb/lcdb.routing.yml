@@ -1,0 +1,9 @@
+lcdb.settings:
+  path: '/admin/structure/lcdb/settings'
+  defaults:
+    _form: '\Drupal\lcdb\Form\Settings'
+    _title: 'LCDB Settings'
+  requirements:
+    _permission: 'administer site configuration'
+  options:
+    _admin_route: TRUE

@@ -1,0 +1,334 @@
+<?php
+/**
+ * @file
+ * Contains lcdb.module.
+ */
+use Drupal\Core\Form\FormStateInterface;
+//use Drupal\Core\Datetime\DrupalDateTime;
+//use Drupal\Core\Ajax\AjaxResponse;
+//use Drupal\Core\Ajax\AppendCommand;
+//use Drupal\Core\Routing\RouteMatchInterface;
+//use Drupal\Core\Entity\EntityTypeManager;
+use Symfony\Component\HttpFoundation\RedirectResponse;
+use Drupal\views\ViewExecutable;
+use Drupal\Component\Utility\DiffArray;
+
+/**
+ * Implements hook_views_pre_render().
+ *
+ * @param \Drupal\views\ViewExecutable $view
+ */
+function lcdb_views_pre_render(ViewExecutable $view) {
+  if (isset($view) && $view->storage->id() == 'my_lc') {
+    $view->element['#attached']['library'][] = 'lcdb/view_menu';
+  }
+}
+
+/**
+ * Implements hook_view_pre_build
+ * Act on the view before the query is built, but after displays are attached.
+ *
+ * Output can be added to the view by setting $view->attachment_before
+ * and $view->attachment_after.
+ *
+ * @param \Drupal\views\ViewExecutable $view
+ *   The view object about to be processed.
+ *
+ * @see \Drupal\views\ViewExecutable
+*/
+function lcdb_views_pre_build(ViewExecutable $view) {
+  //ksm($view->storage->id());
+  if (isset($view) && ($view->storage->id() == 'fte' || $view->storage->id() == '_tab_enrollment' /*|| $view->storage->id() == 'my_lc'*/)) {
+    $config = \Drupal::config('lcdb.settings');
+    $view->filter['field_d14_value']->value = [$config->get('year')];
+  }
+  //TODO set default year for all views
+  //TODO Add defaults to views
+}
+
+/**
+ * Implements hook_user_login()
+ */
+function lcdb_user_login($account) {
+  if($account->hasField('field_essdack_learning_center') && isset($account->get('field_essdack_learning_center')->getValue()[0]['target_id'])) {
+    $url = "/essdack_learning_center/" . $account->get('field_essdack_learning_center')->getValue()[0]['target_id'];
+  }else {
+    $url = "/user";
+  }
+  $response = new RedirectResponse($url);
+  $response->send();
+}
+
+/**
+ * Implements hook_form_alter().
+ */
+function lcdb_form_alter(&$form, FormStateInterface $form_state, $form_id) {
+  //todo attach only to needed forms
+  $form['#attached']['library'][] = 'lcdb/inline_fields';
+  $entityManager = \Drupal::service('entity_type.manager');
+  //ksm($form_id);
+  switch ($form_id){
+    case 'kids_data_asgt_form':
+      //get lc from logged in user and set as default
+      $account = \Drupal\user\Entity\User::load(\Drupal::currentUser()->id());
+      if($account->hasField('field_essdack_learning_center') && !empty($lc=$account->get('field_essdack_learning_center')->getValue()[0]['target_id']) ) {
+        $form['field_essdack_learning_center']['widget']['#default_value'] = $lc;
+        if($lc == 7) {
+          //set default status to pre-enroll for Haysville LC
+          $form['field_status']['widget']['#default_value'] = 'Pre-Enrolled';
+        }else{
+          //hide status for all others
+          hide($form['field_status']);
+        }
+      }
+      //ensure student is set
+      if(is_numeric( $st = \Drupal::request()->query->get('student') ) ){
+        //&& $entity = $entityManager->getStorage('kids_data')->load($st) ) {
+        $form['field_student']['widget']['#default_value'][0] = $st;
+        //$form_state->setTemporaryValue('student', $st);
+        hide($form['field_student']);
+//        $name = $entity->get('field_d5')->getValue()[0]['value']
+//          .' '.
+//          $entity->get('field_d6')->getValue()[0]['value']
+//          .' '.
+//          $entity->get('field_d4')->getValue()[0]['value'];
+//        $form['#title'] = t('Enroll (<a href="/kids_data/:st">%name</a>)',['%name'=>$name, ':st'=>$st]);
+
+        $config = \Drupal::config('lcdb.settings');
+        $form['field_d14']['widget']['#default_value'][0] = $config->get('year');
+        $tabs = ['group_count', 'group_laptop', 'group_from_defaults'];
+        foreach($tabs as $tab) {
+          $form['#fieldgroups'][$tab]->format_type = 'hidden';
+          foreach($form['#fieldgroups'][$tab]->children as $child) {
+            hide($form[$child]);
+          }
+        }
+      }else {
+        $form=[];
+        $form['#title'] = t('Student must be selected');
+      }
+      break;
+    case 'kids_data_asgt_edit_form':
+      $form['field_status']['widget']['#default_value'] = 'Enrolled';
+      //$form['#title'] = t('Edit Enrollment');
+      $form['field_student']['widget']['#attributes']['disabled'] = 'disabled';
+      //Hiding fields is causing date to be empty on edit.
+     /* $tabs = ['group_count', 'group_laptop', 'group_from_defaults'];
+      foreach($tabs as $tab) {
+        $form['#fieldgroups'][$tab]->format_type = 'hidden';
+        foreach($form['#fieldgroups'][$tab]->children as $child) {
+          hide($form[$child]);
+        }
+      }*/
+
+      break;
+    //case 'kids_data_default_edit_form':
+    case 'kids_data_default_form' :
+      break;
+    case 'credit_credit_edit_form':
+      $form['field_student']['widget']['#attributes']['disabled'] = 'disabled';
+      break;
+    case 'credit_credit_form':
+      $form['title']['widget'][0]['value']['#title'] = t('Course Title');
+      unset($form['title']['widget'][0]['value']['#description']);
+      if(is_numeric( $st = \Drupal::request()->query->get('student') ) && $entity = $entityManager->getStorage('kids_data')->load($st)) {
+        $form['field_student']['widget']['#default_value'][0] = $st;
+        $form['field_student']['widget']['#attributes']['disabled'] = 'disabled';
+        /**
+         * changed to use new label instead of view on enity, update title to match.
+         * Helped decrease page load times!
+         */
+        //$name =  $entity->get('field_d5')->getValue()[0]['value'] .' '. $entity->get('field_d6')->getValue()[0]['value'] .' '. $entity->get('field_d4')->getValue()[0]['value'];
+        $name = $entity->get('title')->value;
+        $form['#title'] = t('Add Credit (<a href="/kids_data/:st">%name</a>)',['%name'=>$name, ':st'=>$st]);
+        $config = \Drupal::config('lcdb.settings');
+        $form['field_year']['widget']['#default_value'] = $config->get('year');
+      }else {
+        $form=[];
+        $form['#title'] = t('Student must be selected');
+      }
+      break;
+    default:
+  }
+}
+
+/**
+ * Alter the fields used to represent an entity in the IEF table.
+ *
+ * The fields can be either Field API fields or properties defined through
+ * hook_entity_property_info().
+ *
+ * @param $fields
+ *   The table fields to alter. Each field is represented by an associative
+ *   array containing the following keys:
+ *   - type: either 'property', 'field' or 'callback' to specify how the data is
+ *     defined on the related entity.
+ *   - label: the title of the table field's column in the IEF table.
+ *   - sanitized: for 'property' type table fields, a boolean indicating whether
+ *     or not the data has already been sanitized for output; if not present or
+ *     FALSE, theme_inline_entity_form_entity_table() will sanitize the data for
+ *     output using check_plain().
+ *   - formatter: for 'field' type table fields, the machine-name of the display
+ *     formatter to use to render the field data. If this is used, then further
+ *     keys will be set in the array passed to field_view_field() as the
+ *     $display parameter. This allows any of the settings defined in the field
+ *     formatter's hook_field_formatter_info() to be used.
+ *   - weight: the sort order of the column in the IEF table.
+ *   - render_callback: for 'callback' type table fields, a function name that
+ *     returns a renderable array.
+ * @param $context
+ *   An array with the following keys:
+ *   - parent_entity_type: The type of the parent entity.
+ *   - parent_bundle: The bundle of the parent entity.
+ *   - field_name: The name of the reference field on which IEF is operating.
+ *   - entity_type: The type of the referenced entities.
+ *   - allowed_bundles: Bundles allowed on the reference field.
+ *
+ * @see EntityInlineEntityFormController::tableFields()
+ *
+ * Implements hook_inline_entity_form_table_fields_alter().
+ */
+function lcdb_inline_entity_form_table_fields_alter(&$fields, $context) {
+  //if ($context['parent_entity_type'] == 'student')
+  //ksm(['lcdb_inline_entity_form_table_fields_alter',$context,$fields]);
+  switch ($context['entity_type']){
+    case 'credit':
+      unset($fields['label']);
+      $fields['field_course'] = [
+        'type' => 'field',
+        'label' => t('Course'),
+        'weight' => 1,
+      ];
+      $fields['field_grade'] = [
+        'type' => 'field',
+        'label' => t('Grade'),
+        'weight' => 1,
+      ];
+      $fields['field_semester'] = [
+        'type' => 'field',
+        'label' => t('Semester'),
+        'weight' => 1,
+      ];
+      $fields['field_teacher'] = [
+        'type' => 'field',
+        'label' => t('Teacher'),
+        'weight' => 1,
+      ];
+      $fields['created'] = [
+        'type' => 'field',
+        'label' => t('Date'),
+        'weight' => 1,
+      ];
+      break;
+    case 'kids_data':
+      unset($fields['label']);
+      break;
+    default:
+  }
+}
+
+/**
+ * Implements hook_entity_presave
+ *
+ * @param \Drupal\Core\Entity\EntityInterface $entity
+ */
+/*function lcdb_entity_presave($entity) {
+  //$entity->original
+  ksm($entity->getEntityType()->id(),'entity');
+}*/
+
+/**
+ * Implements hook_ENTITY_TYPE_presave
+ *
+ * @param \Drupal\Core\Entity\EntityInterface $entity
+ */
+function lcdb_kids_data_presave(Drupal\Core\Entity\EntityInterface $entity) {
+  if($entity->bundle() === 'asgt') {
+    if(!$entity->isNew()) {
+      $serializer = \Drupal::service('serializer');
+      $data = $serializer->serialize($entity, 'json', ['plugin_id' => 'entity']);
+      $original = $serializer->serialize($entity->original, 'json', ['plugin_id' => 'entity']);
+      if ($data !== $original) {
+        //$changed = implode(',', array_keys(DiffArray::diffAssocRecursive($entity->toArray(), $entity->original->toArray())) );
+        $changed = array_keys(DiffArray::diffAssocRecursive($entity->toArray(), $entity->original->toArray()));
+        $message = "<table><caption>" . $entity->id() .  "</caption>";
+        $message .= "<tr><th>Field</th><th>Original</th><th>New</th></tr>";
+        $changed[] = 'field_count_day_1';
+        $changed[] = 'field_count_day_2';
+        foreach ($changed as $value) {
+          $old = $entity->original->get($value)->getString();
+          $new = $entity->get($value)->getString();
+          $message .= "<tr><td>$value" . "</td><td><del>$old</del></td><td><ins>$new</ins></td></tr>";
+        }
+        $message .= "</table>";
+
+        $cd1 = ($entity->original->get('field_count_day_1')->getString() != $entity->get('field_count_day_1')->getString());
+        $cd2 = ($entity->original->get('field_count_day_2')->getString() != $entity->get('field_count_day_2')->getString());
+        if( $cd1 || $cd2 ){
+          \Drupal::logger('asgt')->critical($message, ['@field_count_day_1' => $cd1, '@field_count_day_2' => $cd2, '@$entity->id()' => $entity->id() ]);
+        }else{
+          \Drupal::logger('asgt')->debug($message);
+        }
+      }
+    }
+
+
+    //if(
+    // $entity->original->get('field_count_day_1_minutes')->getValue()[0]['value']
+    // != $entity->get('field_count_day_1_minutes')->getValue()[0]['value']
+    // || $entity->original->get('field_count_day_2_minutes')->getValue()[0]['value']
+    // != $entity->get('field_count_day_2_minutes')->getValue()[0]['value'] ) {
+      if( $entity->hasField('field_count_day_1_minutes') && $entity->hasField('field_count_day_2_minutes') ) {
+        if( isset($entity->get('field_count_day_1_minutes')->getValue()[0]['value']) && !empty($entity->get('field_count_day_1_minutes')->getValue()[0]['value']) ) {
+          $min1 = (int) $entity->get('field_count_day_1_minutes')->getValue()[0]['value'];
+        }else{ $min1 = 0; }
+        if( isset($entity->get('field_count_day_2_minutes')->getValue()[0]['value']) && !empty($entity->get('field_count_day_2_minutes')->getValue()[0]['value']) ) {
+          $min2 = (int) $entity->get('field_count_day_2_minutes')->getValue()[0]['value'];
+        }else{ $min2 = 0; }
+        //$min1 = (int) $entity->get('field_count_day_1_minutes')->getValue()[0]['value'] ?: 0;
+        //$min2 = (int) $entity->get('field_count_day_2_minutes')->getValue()[0]['value'] ?: 0;
+
+        if($min1 >= 18 & $min2 >= 18) {
+          $countMin = ($min1 + $min2) / 2;
+          $entity->set('field_d24', $countMin);
+          $entity->set('field_count_fte', round($countMin / 360, 1, PHP_ROUND_HALF_UP));
+      }else{
+        $entity->set('field_d24', NULL);
+        $entity->set('field_count_fte', NULL);
+      }
+    }
+  }
+}
+
+/**
+ * Implements hook_views_data_alter().
+ */
+function lcdb_views_data_alter(array &$data) {
+  $data['kids_data']['enroll_link'] = [
+    'title' => t('Enrollment Link'),
+    'field' => [
+      'title' => t('Enroll Link'),
+      'help' => t('Provides an enrollment link.'),
+      'id' => 'enroll_link',
+    ]
+  ];
+}
+
+function _lcdb_diff($old, $new){
+  $old = str_replace(',','<br />', $old );
+  $new = str_replace(',','<br />', $new );
+  $from_start = strspn($old ^ $new, "\0");
+  $from_end = strspn(strrev($old) ^ strrev($new), "\0");
+
+  $old_end = strlen($old) - $from_end;
+  $new_end = strlen($new) - $from_end;
+
+  $start = substr($new, 0, $from_start);
+  $end = substr($new, $new_end);
+  $new_diff = substr($new, $from_start, $new_end - $from_start);
+  $old_diff = substr($old, $from_start, $old_end - $from_start);
+
+  $new = "$start<ins style='background-color:#ccffcc'>$new_diff</ins>$end";
+  $old = "$start<del style='background-color:#ffcccc'>$old_diff</del>$end";
+  return "<table><tr><td>$old</td><td>$new</td></tr></table>";
+}
